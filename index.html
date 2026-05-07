@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>情境面试作答</title>
+    <script src="https://unpkg.com/jspsych@7.3.3"></script>
+    <script src="https://unpkg.com/jspsych@7.3.3/plugins/plugin-survey-html-form.js"></script>
+    <script src="https://unpkg.com/jspsych@7.3.3/plugins/plugin-html-keyboard-response.js"></script>
+    <link href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css" rel="stylesheet" type="text/css" />
+    <style>
+        .container { text-align: left; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+        .textarea-box { width: 100%; height: 150px; margin-top: 10px; }
+        .ai-feedback { background: #f4f4f4; padding: 15px; border-left: 4px solid #007bff; margin: 15px 0; }
+    </style>
+</head>
+<body></body>
+<script>
+    const jsPsych = initJsPsych({
+        on_finish: function() {
+            // 实验结束后的数据处理，例如重定向回问卷星或保存数据
+            jsPsych.data.displayData();
+        }
+    });
+
+    const questionText = "你刚入职一家顶尖企业不到一个月。公司副总裁（VP）在走廊里偶然碰见你，口头交办了一项极其重要且紧急的行业调研任务，但要求极其模糊。VP马上要登机出国，接下来一周都很难联系上。面对这种高风险的模糊任务，你将如何开展工作并确保最终交付？";
+
+    let draftText = "";
+    let aiResponseText = "";
+
+    // 1. 初稿页面
+    const draft_trial = {
+        type: jsPsychSurveyHtmlForm,
+        preamble: `<div class="container"><h3>面试问题</h3><p>${questionText}</p></div>`,
+        html: `
+            <div class="container">
+                <p>请在下方输入您的初步回答思路（不少于100字）：</p>
+                <textarea name="draft" class="textarea-box" required></textarea>
+            </div>
+        `,
+        button_label: '提交并获取 AI 面试教练建议',
+        on_finish: function(data) {
+            draftText = data.response.draft;
+        }
+    };
+
+    // 2. 加载与 API 请求页面
+    const loading_trial = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: '<div class="container"><h3>正在为您生成 AI 专属优化建议，请稍候...</h3><div class="loader"></div></div>',
+        choices: "NO_KEYS",
+        on_load: async function() {
+            try {
+                // 注意：这里需要替换为你自己的后端代理地址
+                const response = await fetch('https://your-backend-server.com/api/get_ai_feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: questionText,
+                        draft: draftText
+                    })
+                });
+                const result = await response.json();
+                aiResponseText = result.ai_text;
+            } catch (error) {
+                aiResponseText = "网络请求失败，请直接根据原思路继续完善您的终稿。";
+            }
+            jsPsych.finishTrial(); // 请求结束后自动跳转下一页
+        }
+    };
+
+    // 3. 终稿页面
+    const final_trial = {
+        type: jsPsychSurveyHtmlForm,
+        preamble: function() {
+            return `
+            <div class="container">
+                <h3>面试问题</h3><p>${questionText}</p>
+                <div class="ai-feedback">
+                    <h4>AI 面试教练优化建议：</h4>
+                    <p>${aiResponseText}</p>
+                </div>
+            </div>`;
+        },
+        html: `
+            <div class="container">
+                <p>参考 AI 的建议，请在下方输入您的最终回答：</p>
+                <textarea name="final_answer" class="textarea-box" required></textarea>
+            </div>
+        `,
+        button_label: '提交最终回答',
+        on_finish: function(data) {
+            data.question = questionText;
+            data.draft = draftText;
+            data.ai_feedback = aiResponseText;
+            data.final_answer = data.response.final_answer;
+        }
+    };
+
+    jsPsych.run([draft_trial, loading_trial, final_trial]);
+</script>
+</html>
